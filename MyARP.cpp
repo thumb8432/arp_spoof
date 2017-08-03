@@ -56,7 +56,7 @@ bool getMyIPaddr(IPaddr *myip, const char *interface)
         return false;
     }
 
-    memcpy(myip, ifr.ifr_addr.sa_data, IP_ADDR_LEN);
+    memcpy(myip, ifr.ifr_addr.sa_data+2, IP_ADDR_LEN);
 
     close(fd);
 
@@ -153,10 +153,4 @@ bool getHWaddrByIPaddr(HWaddr *tha, pcap_t *handle, const HWaddr sha, const IPad
     }
 
     return true;
-}
-
-int main(int argc, char **argv)
-{
-    google::InitGoogleLogging(argv[0]);
-    return 0;
 }
