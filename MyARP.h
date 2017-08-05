@@ -6,7 +6,6 @@
 #include <net/if_arp.h>
 #include <net/if.h>
 #include <netinet/in.h>
-//#include <netinet/ether.h>
 #include <netinet/if_ether.h>
 #include <sys/ioctl.h>
 #include <arpa/inet.h>
