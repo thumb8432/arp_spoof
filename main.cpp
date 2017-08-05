@@ -43,7 +43,7 @@ void *ARPSpoofing(void *)
     thread_idx++;
     pthread_mutex_unlock(&mutex);
     
-    if((handle = pcap_open_live(interface, BUFSIZ, 1, 1000, errbuf))==NULL)
+    if((handle = pcap_open_live(interface, BUFSIZ, 1, 1, errbuf))==NULL)
     {
         LOG(FATAL) << "pcap_open_live : failed";
         return NULL;
@@ -129,7 +129,7 @@ int main(int argc, char **argv)
     LOG(INFO) << "attacker_ip : " << inet_ntoa(attacker_ip);
     LOG(INFO) << "attacker_ha : " << ether_ntoa(&attacker_ha);
 
-    if((handle = pcap_open_live(interface,  BUFSIZ, 1, 1, errbuf))==NULL)
+    if((handle = pcap_open_live(interface,  BUFSIZ, 1, 1000, errbuf))==NULL)
     {
         LOG(FATAL) << "pcap_open_live : failed";
         return -1;
