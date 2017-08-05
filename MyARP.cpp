@@ -1,6 +1,8 @@
 #include "MyARP.h"
 #include <glog/logging.h>
 
+#define MAC_OS_X
+
 bool equalIPaddr(const IPaddr ip1, const IPaddr ip2)
 {
     return memcmp(&ip1, &ip2, IP_ADDR_LEN) == 0;
@@ -13,6 +15,21 @@ bool equalHWaddr(const HWaddr ha1, const HWaddr ha2)
 
 bool getMyHWaddr(HWaddr *myha, const char *interface)
 {
+#ifdef MAC_OS_X
+    char    buf[100];
+    char    mac[100];
+    FILE    *fp = NULL;
+
+    sprintf(buf, "ifconfig %s | awk '/ether/{print $2}'", interface);
+    fp = popen(buf, "r");
+    fscanf(fp, "%s", mac);
+    pclose(fp);
+    memcpy(myha, ether_aton(mac), HW_ADDR_LEN);
+
+    return true;
+#endif
+
+#ifndef MAC_OS_X
     int             fd;
     struct ifreq    ifr;
 
@@ -35,6 +52,7 @@ bool getMyHWaddr(HWaddr *myha, const char *interface)
     close(fd);
 
     return true;
+#endif
 }
 
 bool getMyIPaddr(IPaddr *myip, const char *interface)
@@ -107,7 +125,7 @@ bool getHWaddrByIPaddr(HWaddr *tha, pcap_t *handle, const HWaddr sha, const IPad
     int res;
 
     makeARPBroadcastPacket(&sendpkt, sha, sip, tip);
-    if(pcap_sendpacket(handle, (u_char *)&sendpkt, sizeof(sendpkt)) != 0)
+    if(pcap_sendpacket(handle, (u_char *)&sendpkt, sizeof(ARPpkt)) != 0)
     {
         LOG(FATAL) << "pcap_sendpacket : failed";
         return false;
@@ -125,7 +143,7 @@ bool getHWaddrByIPaddr(HWaddr *tha, pcap_t *handle, const HWaddr sha, const IPad
         if(res == 0)
         {
             LOG(INFO) << "timeout";
-            if(pcap_sendpacket(handle, (u_char *)&sendpkt, sizeof(sendpkt)) != 0)
+            if(pcap_sendpacket(handle, (u_char *)&sendpkt, sizeof(ARPpkt)) != 0)
             {
                 LOG(FATAL) << "pcap_sendpacket : failed";
                 return false;

